@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.25.1"
+__generated_with = "0.24.2"
 app = marimo.App(width="medium")
 
 
@@ -224,7 +224,6 @@ def _(
         estavel,
         extrair_G,
         init,
-        regra_celula,
         trans,
     )
 
@@ -429,7 +428,6 @@ def _(mo):
 
 @app.cell
 def _(
-    And,
     MODO,
     N,
     Not,
@@ -441,7 +439,6 @@ def _(
     extrair_G,
     init,
     np,
-    regra_celula,
     sat,
     trans,
     unsat,
@@ -487,16 +484,29 @@ def _(
                 return {"resultado": "PROVADA por k-indução", "k": k}
         return {"resultado": f"INCONCLUSIVA (k <= {k_max})", "k": k_max}
 
-    def prova_1_inducao_sync(n=N):
-        """
-        Passo indutivo com k=1 (modo síncrono): existe s0 != erro com T(s0,s1) e s1 = erro?
-        UNSAT => o erro não tem predecessor não-erro => nunca é alcançado (init != erro).
-        Depende da seed (a moldura aleatória pode impedir/permitir a morte total).
-        """
+    def prova_1_orbita_z3(transiente, periodo, n=N):
+        """Prova em Z3 que o erro nunca é alcançado (síncrono)."""
+        L = transiente + periodo
         s = Solver()
-        a, b = declare("p0", n), declare("p1", n)
-        s.add(Not(error_state(a, n)), trans(a, b, "sync", n), error_state(b, n))
-        return s.check() == unsat
+        est = [declare(f"p1_{t}", n) for t in range(L + 1)]
+        s.add(init(est[0], n))
+        for t in range(L):
+            s.add(trans(est[t], est[t + 1], "sync", n))
+
+        # (a) nenhum s_0..s_{L-1} é erro
+        s.push()
+        s.add(Or([error_state(est[t], n) for t in range(L)]))
+        sem_erro = s.check() == unsat
+        s.pop()
+
+        # (b) o ciclo fecha: s_L == s_T
+        s.push()
+        s.add(Or([Xor(est[L][(i, j)], est[transiente][(i, j)])
+                  for i in range(1, n + 1) for j in range(1, n + 1)]))
+        fecha = s.check() == unsat
+        s.pop()
+
+        return sem_erro and fecha
 
     def certificar_lasso_z3(transiente, periodo, n=N):
         """
@@ -521,39 +531,6 @@ def _(
         )
         return s.check() == unsat
 
-    def conjunto_permanentemente_morto(modo=MODO, n=N):
-        """
-        Maior conjunto D de normais, inicialmente mortas, com D-mortas => D-mortas no passo seguinte
-        (ponto fixo descendente; cada teste é um check em Z3). Células em D nunca nascem.
-        """
-        D = {
-            (i, j)
-            for i in range(1, n + 1)
-            for j in range(1, n + 1)
-            if not (i <= 3 and j <= 3)
-        }
-        while D:
-            s = Solver()
-            st = declare("inv_d", n)
-            for c in D:
-                s.add(Not(st[c]))
-            remover = set()
-            for c in D:
-                s.push()
-                s.add(regra_celula(st, *c))
-                if s.check() == sat:
-                    remover.add(c)
-                s.pop()
-            if not remover:
-                break
-            D -= remover
-        valido = False
-        if D:
-            s = Solver()
-            a, b = declare("chk_0", n), declare("chk_1", n)
-            s.add(And([Not(a[c]) for c in D]), trans(a, b, modo, n), Or([b[c] for c in D]))
-            valido = s.check() == unsat
-        return D if valido else set()
 
     def analisar_orbita(orbita, n=N):
         """Células normais constantes ao longo do ciclo atrator."""
@@ -567,9 +544,8 @@ def _(
         analisar_orbita,
         bmc,
         certificar_lasso_z3,
-        conjunto_permanentemente_morto,
         k_inducao_nunca_erro,
-        prova_1_inducao_sync,
+        prova_1_orbita_z3,
     )
 
 
@@ -605,7 +581,7 @@ def _(
     k_slider,
     mo,
     orbita_sync,
-    prova_1_inducao_sync,
+    prova_1_orbita_z3,
 ):
     mo.stop(not btn_prop1.value, mo.md("_Clica no botão para correr o Z3._"))
 
@@ -623,28 +599,35 @@ def _(
     ]
 
     if MODO == "sync":
-        _p1 = prova_1_inducao_sync(N)
         _orb = orbita_sync(grelha_inicial(N, CELULAS_INICIAIS))
-        _linhas = [
-            f"* **1-indução (Z3)**: "
-            + (
-                "✅ UNSAT — o estado de erro não tem predecessor não-erro ⇒ **Propriedade 1 VERDADEIRA**"
-                if _p1
-                else "SAT — existe predecessor do erro (a indução simples não fecha; ver órbita)"
-            )
-        ]
+        _linhas = []
         if _orb is None:
             _linhas.append("* **Órbita**: não convergiu em 20000 passos.")
         else:
+            _T, _P = _orb["transiente"], _orb["periodo"]
             _t_erro = next(
                 (t for t, g in enumerate(_orb["hist"]) if not g[1:-1, 1:-1].any()), None
             )
+
+            # prova em Z3 (só se a órbita não for demasiado longa)
+            _p1 = prova_1_orbita_z3(_T, _P, N) if _T + _P <= 800 else None
+
+            if _p1 is True:
+                _txt_z3 = "✅ provado em Z3: o erro não é alcançável e o ciclo fecha ⇒ **Propriedade 1 VERDADEIRA**"
+            elif _p1 is False and _t_erro is not None:
+                _txt_z3 = "❌ Z3 encontrou o erro na órbita ⇒ **Propriedade 1 FALSA**"
+            elif _p1 is False:
+                _txt_z3 = "⚠️ Z3 não confirmou (ver órbita abaixo)"
+            else:
+                _txt_z3 = "não certificado (órbita > 800 passos); resultado baseado na simulação"
+
+            _linhas.append(f"* **Prova em Z3 (órbita)**: {_txt_z3}")
             _linhas.append(
-                f"* **Órbita completa** (transiente={_orb['transiente']}, período={_orb['periodo']}): "
+                f"* **Órbita completa** (transiente={_T}, período={_P}): "
                 + (
                     f"❌ erro no passo {_t_erro} ⇒ **Propriedade 1 FALSA**"
                     if _t_erro is not None
-                    else "✅ o erro nunca ocorre ⇒ **Propriedade 1 VERDADEIRA** (decisão completa, sistema determinista e finito)"
+                    else "✅ o erro nunca ocorre ⇒ **Propriedade 1 VERDADEIRA** (sistema determinista e finito)"
                 )
             )
         _out.append(mo.md("\n".join(_linhas)))
@@ -675,7 +658,6 @@ def _(mo):
       A trajetória é certificada em Z3.
     * **Assíncrono**: sem hipótese de justiça, basta alcançar um **estado estável** (nenhuma célula pode mudar;
       relação faz *stutter*) para todas as células ficarem constantes para sempre. Procura-se por BMC.
-    * **Ambos**: Z3 prova um conjunto $D$ de células que **nunca nascem** (invariante indutivo).
     """)
     return
 
@@ -698,7 +680,6 @@ def _(
     bmc,
     btn_prop2,
     certificar_lasso_z3,
-    conjunto_permanentemente_morto,
     desenhar_grelha,
     estavel,
     grelha_inicial,
@@ -710,13 +691,7 @@ def _(
 
     _out = [mo.md(f"#### Propriedade 2 (`modo={MODO}`, `N={N}`, `seed={SEED}`)")]
 
-    _D = conjunto_permanentemente_morto(MODO, N)
-    _out.append(
-        mo.md(
-            f"* **Invariante indutivo em Z3**: {len(_D)} células normais **nunca nascem** "
-            + (f"(ex.: `{sorted(_D)[:8]}`)" if _D else "(conjunto vazio: o invariante não exclui nenhuma célula)")
-        )
-    )
+
 
     if MODO == "sync":
         _orb = orbita_sync(grelha_inicial(N, CELULAS_INICIAIS))
