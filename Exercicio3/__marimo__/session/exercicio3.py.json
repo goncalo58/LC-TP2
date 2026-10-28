@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.24.2",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "92221f300da3dc2cd05084c6b9ed7d8f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "\n========== ALINEA A ==========\nEstado inicial: sat\nRelacao de transicao: sat\n\n========== ALINEA B ==========\nCaso base: unsat\nPasso indutivo: unsat\nInvariante provado por 1-inducao.\n\n========== ALINEA C ==========\nLimite: 16\nCaso base: unsat\nPasso indutivo: unsat\nSeguranca provada por 1-inducao.\nO estado ERROR e inacessivel.\n\n========== ALINEA D ==========\nRanking negativo: unsat\nRanking nao decrescente: unsat\nTerminacao provada.\n\n========== ALINEA D (ANIMACAO) ==========\nDeadlock fora dos finais: unsat\nFinais com sucessor: unsat\nAnimacao provada: o programa termina para quaisquer a, b.\n\n========== ALINEA E (CORRECAO) ==========\nJ - Caso base: unsat\nJ - Passo indutivo: unsat\nSTOP e z != a*b (mod 2^n): unsat\nSTOP e z != a*b (inteiros, a,b pequenos): unsat\nCorrecao provada: ao chegar a STOP, z = a*b.\n\n========== ALINEA F (K-INDUCAO) ==========\nCruzada (invariante C, k=1): unsat unsat\nk= 1  base: unsat  passo: sat\nk= 2  base: unsat  passo: sat\nk= 3  base: unsat  passo: sat\nk= 4  base: unsat  passo: sat\nk= 5  base: unsat  passo: sat\nk= 6  base: unsat  passo: sat\nk= 7  base: unsat  passo: sat\nk= 8  base: unsat  passo: sat\nk= 9  base: unsat  passo: sat\nk=10  base: unsat  passo: sat\nk=11  base: unsat  passo: sat\nk=12  base: unsat  passo: sat\nk=13  base: unsat  passo: sat\nk=14  base: unsat  passo: sat\nk=15  base: unsat  passo: sat\nk=16  base: unsat  passo: sat\nk=17  base: unsat  passo: sat\nk=18  base: unsat  passo: sat\nk=19  base: unsat  passo: sat\nk=20  base: unsat  passo: sat\nk=21  base: unsat  passo: sat\nk=22  base: unsat  passo: sat\nk=23  base: unsat  passo: sat\nk=24  base: unsat  passo: sat\nk=25  base: unsat  passo: sat\nk=26  base: unsat  passo: sat\nk=27  base: unsat  passo: sat\nk=28  base: unsat  passo: sat\nk=29  base: unsat  passo: sat\nk=30  base: unsat  passo: sat\nk=31  base: unsat  passo: sat\nk=32  base: unsat  passo: unsat\npc != ERROR e 32-indutivo (menor k testado).\n\n========== RESULTADO FINAL ==========\nAlinea A: SATISFAZIVEL\nAlinea B: PROVADA\nAlinea C: PROVADA\nAlinea D: PROVADA\nAnimacao: PROVADA\nAlinea E: PROVADA\nAlinea F: PROVADA\n\nTodas as verificacoes passaram.\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    }
+  ]
+}

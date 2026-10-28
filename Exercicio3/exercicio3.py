@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.25.0"
+__generated_with = "0.24.2"
 app = marimo.App(width="medium")
 
 
@@ -13,7 +13,7 @@ def _():
     # ==========================================================
 
     n = 8
-    TIMEOUT = 15000
+    TIMEOUT = 120000
 
     # ==========================================================
     # ALINEA A - SFOTS
@@ -23,6 +23,9 @@ def _():
 
     a = z3.BitVec("a", n)
     b = z3.BitVec("b", n)
+    a1 = z3.BitVec("a1", n)
+    b1 = z3.BitVec("b1", n)
+
 
     x = z3.BitVec("x", n)
     y = z3.BitVec("y", n)
@@ -42,7 +45,7 @@ def _():
     ERROR = 5
 
     # Estado inicial
-    inicial = pc == INIT
+    inicial = z3.And(pc == INIT, a >= 0, b >= 0)
 
     # Overflow sem sinal
     overflow_left = z3.Not(
@@ -137,15 +140,20 @@ def _():
     )
 
     # Relacao de transicao
-    transicao = z3.Or(
-        t_init,
-        t_stop,
-        t_left,
-        t_right,
-        t_left_ok,
-        t_right_ok,
-        t_left_error,
-        t_right_error
+    mesmas_ab = z3.And(a1 == a, b1 == b)
+
+    transicao = z3.And(
+        mesmas_ab,
+        z3.Or(
+            t_init,
+            t_stop,
+            t_left,
+            t_right,
+            t_left_ok,
+            t_right_ok,
+            t_left_error,
+            t_right_error
+        )
     )
 
     erro = pc == ERROR
@@ -211,6 +219,8 @@ def _():
     # ==========================================================
     # ALINEA B - INVARIANTE POR K-INDUCAO
     # ==========================================================
+
+    #esta alinea pode dar unknown em algum pc , vai depender do timeout
 
     print("\n========== ALINEA B ==========")
 
@@ -395,6 +405,203 @@ def _():
     else:
         print("Terminacao nao provada.")
 
+        # ----------------------------------------------------------
+        # ALINEA D (cont.) - ANIMACAO: SEM DEADLOCK FORA DOS FINAIS
+        # ----------------------------------------------------------
+
+        print("\n========== ALINEA D (ANIMACAO) ==========")
+
+        nao_final = z3.Or(pc == INIT, pc == SKIP, pc == LEFT, pc == RIGHT)
+
+        tem_sucessor = z3.Exists([pc1, x1, y1, z1, a1, b1], transicao)
+
+        # (i) nenhum estado nao final fica bloqueado
+        resultado_d3 = resolver(nao_final, z3.Not(tem_sucessor))
+
+        # (ii) STOP e ERROR sao realmente finais
+        resultado_d4 = resolver(z3.Or(pc == STOP, pc == ERROR), transicao)
+
+        print("Deadlock fora dos finais:", resultado_d3)
+        print("Finais com sucessor:", resultado_d4)
+
+        prova_animacao = (
+            prova_d
+            and resultado_d3 == z3.unsat
+            and resultado_d4 == z3.unsat
+        )
+
+        if prova_animacao:
+            print("Animacao provada: o programa termina para quaisquer a, b.")
+        else:
+            print("Animacao nao provada.")
+
+
+
+    # ----------------------------------------------------------
+    # ALINEA D (cont.) - ANIMACAO: SEM DEADLOCK FORA DOS FINAIS
+    # ----------------------------------------------------------
+
+    print("\n========== ALINEA D (ANIMACAO) ==========")
+
+    nao_final = z3.Or(pc == INIT, pc == SKIP, pc == LEFT, pc == RIGHT)
+
+    tem_sucessor = z3.Exists([pc1, x1, y1, z1, a1, b1], transicao)
+
+    # (i) nenhum estado nao final fica bloqueado
+    resultado_d3 = resolver(nao_final, z3.Not(tem_sucessor))
+
+    # (ii) STOP e ERROR sao realmente finais
+    resultado_d4 = resolver(z3.Or(pc == STOP, pc == ERROR), transicao)
+
+    print("Deadlock fora dos finais:", resultado_d3)
+    print("Finais com sucessor:", resultado_d4)
+
+    prova_animacao = (
+        prova_d
+        and resultado_d3 == z3.unsat
+        and resultado_d4 == z3.unsat
+    )
+
+    if prova_animacao:
+        print("Animacao provada: o programa termina para quaisquer a, b.")
+    else:
+        print("Animacao nao provada.")
+
+
+
+
+
+    # ==========================================================
+    # ALINEA E - CORRECAO: EM STOP, z = a*b
+    # ==========================================================
+
+    print("\n========== ALINEA E (CORRECAO) ==========")
+
+    # Invariante auxiliar J: STOP so e alcancado com y == 0
+    def invariante_j(p, yy):
+        return z3.Implies(p == STOP, yy == 0)
+
+    j = invariante_j(pc, y)
+    j1 = invariante_j(pc1, y1)
+
+    base_e, passo_e = provar_inducao(j, j1, inicial)
+
+    print("J - Caso base:", base_e)
+    print("J - Passo indutivo:", passo_e)
+
+    # (i) Modulo 2^n: usa o invariante B (provado na alinea B)
+    resultado_e1 = resolver(prop_b, j, pc == STOP, z != a * b)
+
+    # (ii) Entradas pequenas: usa o invariante C (16 bits, sem perder bits)
+    resultado_e2 = resolver(
+        prop_c, j, pc == STOP,
+        ext(z) != ext(a) * ext(b)
+    )
+
+    print("STOP e z != a*b (mod 2^n):", resultado_e1)
+    print("STOP e z != a*b (inteiros, a,b pequenos):", resultado_e2)
+
+    prova_e = (
+        prova_b and prova_c
+        and base_e == z3.unsat and passo_e == z3.unsat
+        and resultado_e1 == z3.unsat and resultado_e2 == z3.unsat
+    )
+
+    if prova_e:
+        print("Correcao provada: ao chegar a STOP, z = a*b.")
+    else:
+        print("Correcao nao provada.")
+
+
+    # ==========================================================
+    # ALINEA F - K-INDUCAO COM k VARIAVEL
+    # ==========================================================
+
+    print("\n========== ALINEA F (K-INDUCAO) ==========")
+
+    # Relacao com sumidouros em STOP e ERROR (so para a k-inducao).
+    sumidouro = z3.And(
+        z3.Or(pc == STOP, pc == ERROR),
+        pc1 == pc, x1 == x, y1 == y, z1 == z, a1 == a, b1 == b
+    )
+    transicao_k = z3.Or(transicao, sumidouro)
+
+    VARS_ATUAL = [pc, x, y, z, a, b]
+    VARS_PROX = [pc1, x1, y1, z1, a1, b1]
+
+
+    def estado(i):
+        return [
+            z3.Int(f"pc_{i}"),
+            z3.BitVec(f"x_{i}", n),
+            z3.BitVec(f"y_{i}", n),
+            z3.BitVec(f"z_{i}", n),
+            z3.BitVec(f"a_{i}", n),
+            z3.BitVec(f"b_{i}", n),
+        ]
+
+
+    def em(expr, atual, prox=None):
+        # instancia uma expressao nas variaveis do passo i (e i+1)
+        pares = list(zip(VARS_ATUAL, atual))
+        if prox is not None:
+            pares += list(zip(VARS_PROX, prox))
+        return z3.substitute(expr, *pares)
+
+
+    def k_inducao(prop, k, inicio):
+        # Caso base: os k primeiros estados do traco satisfazem prop
+        S = [estado(i) for i in range(k)]
+        s = z3.Solver()
+        s.set(timeout=TIMEOUT)
+        s.add(em(inicio, S[0]))
+        for i in range(k - 1):
+            s.add(em(transicao_k, S[i], S[i + 1]))
+        s.add(z3.Or([z3.Not(em(prop, S[i])) for i in range(k)]))
+        base = s.check()
+
+        # Passo: prop em k estados consecutivos => prop no seguinte
+        S = [estado(i) for i in range(k + 1)]
+        s = z3.Solver()
+        s.set(timeout=TIMEOUT)
+        for i in range(k):
+            s.add(em(prop, S[i]))
+            s.add(em(transicao_k, S[i], S[i + 1]))
+        s.add(z3.Not(em(prop, S[k])))
+        passo = s.check()
+
+        return base, passo
+
+
+    inicio_c = z3.And(inicial, entradas_pequenas)
+
+    # (i) Verificacao cruzada: o invariante reforcado da C, com k = 1
+    base_f0, passo_f0 = k_inducao(prop_c, 1, inicio_c)
+    print("Cruzada (invariante C, k=1):", base_f0, passo_f0)
+
+    # (ii) Propriedade simples (pc != ERROR): procurar o menor k
+    seguro = pc != ERROR
+    k_min = None
+
+    for k in range(1, 61):
+        base_k, passo_k = k_inducao(seguro, k, inicio_c)
+        print(f"k={k:2d}  base: {base_k}  passo: {passo_k}")
+        if base_k != z3.unsat:
+            break
+        if passo_k == z3.unsat:
+            k_min = k
+            break
+
+    prova_f = (
+        base_f0 == z3.unsat and passo_f0 == z3.unsat
+        and k_min is not None
+    )
+
+    if k_min is not None:
+        print(f"pc != ERROR e {k_min}-indutivo (menor k testado).")
+    else:
+        print("pc != ERROR nao ficou provado ate k=60.")
+
 
     # ==========================================================
     # RESULTADO FINAL
@@ -427,7 +634,15 @@ def _():
         "PROVADA" if prova_d else "NAO PROVADA"
     )
 
-    if prova_a and prova_b and prova_c and prova_d:
+
+
+    print("Animacao:", "PROVADA" if prova_animacao else "NAO PROVADA")
+
+    print("Alinea E:", "PROVADA" if prova_e else "NAO PROVADA")
+
+    print("Alinea F:", "PROVADA" if prova_f else "NAO PROVADA")
+
+    if prova_a and prova_b and prova_c and prova_d and prova_animacao and prova_e and prova_f:
         print("\nTodas as verificacoes passaram.")
     else:
         print("\nExistem verificacoes por concluir.")
