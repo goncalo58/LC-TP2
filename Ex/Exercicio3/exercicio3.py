@@ -204,6 +204,80 @@ def _(
 
     print("Relacao de transicao criada!")
     print("Estado de erro definido!")
+    return (transicao,)
+
+
+@app.cell
+def _(n, pc, pc1, transicao, x, x1, y, y1, z, z1, z3):
+    # ALINEA B - Verificacao do invariante por k-inducao
+
+    # Propriedade que queremos verificar
+    def propriedade(x, y, z, a, b):
+        return x * y + z == a * b
+
+
+    # Criar as variaveis para cada passo
+    def estado(i):
+        return (
+            z3.BitVec(f"x_{i}", n),
+            z3.BitVec(f"y_{i}", n),
+            z3.BitVec(f"z_{i}", n),
+            z3.Int(f"pc_{i}")
+        )
+
+
+    # Substituir as variaveis na relacao de transicao
+    def passo(e1, e2):
+        xa, ya, za, pca = e1
+        xb, yb, zb, pcb = e2
+
+        return z3.substitute(
+            transicao,
+            (x, xa),
+            (y, ya),
+            (z, za),
+            (pc, pca),
+            (x1, xb),
+            (y1, yb),
+            (z1, zb),
+            (pc1, pcb)
+        )
+
+
+    print("Funcoes para k-inducao criadas!")
+    return estado, passo, propriedade
+
+
+@app.cell
+def _(a, b, estado, passo, propriedade, z3):
+    # PASSO INDUTIVO
+
+    def passo_indutivo(k):
+        s = z3.Solver()
+
+        estados = [estado(i) for i in range(k + 1)]
+
+        # Relacoes de transicao
+        for i in range(k):
+            s.add(passo(estados[i], estados[i + 1]))
+
+        # Admitimos que a propriedade e verdadeira
+        # nos primeiros k estados
+        for i in range(k):
+            xi, yi, zi, pci = estados[i]
+
+            s.add(propriedade(xi, yi, zi, a, b))
+
+        # Procuramos uma violacao no estado seguinte
+        xf, yf, zf, pcf = estados[k]
+
+        s.add(z3.Not(propriedade(xf, yf, zf, a, b)))
+
+        return s.check()
+
+
+    for k in range(1, 6):
+        print(f"k = {k}: {passo_indutivo(k)}")
     return
 
 
