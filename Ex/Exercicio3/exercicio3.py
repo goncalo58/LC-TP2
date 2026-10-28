@@ -6,45 +6,36 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
-
     import z3
 
-    # Tamanho dos vetores de bits
+    # ==================================================
+    # EXERCICIO 3 - LOGICA COMPUTACIONAL
+    # Multiplicacao de inteiros com Z3
+    # ==================================================
+
+    # ==================================================
+    # ALINEA A - CONSTRUCAO DO SFOTS
+    # ==================================================
+
     n = 8
 
-    # Variaveis iniciais
+    # Variaveis de entrada
     a = z3.BitVec("a", n)
     b = z3.BitVec("b", n)
 
-    # Variaveis do algoritmo
+    # Variaveis do estado atual
     x = z3.BitVec("x", n)
     y = z3.BitVec("y", n)
     z = z3.BitVec("z", n)
-
-    print("Variaveis criadas com sucesso!")
-    return a, b, n, x, y, z, z3
-
-
-@app.cell
-def _():
-    import z3
-
-    # Tamanho dos vetores de bits
-    n = 8
-
-    # Valores de entrada
-    a = z3.BitVec("a", n)
-    b = z3.BitVec("b", n)
-
-    # Variáveis do algoritmo
-    x = z3.BitVec("x", n)
-    y = z3.BitVec("y", n)
-    z = z3.BitVec("z", n)
-
-    # Identificador do estado do autómato
     pc = z3.Int("pc")
 
-    # Identificadores dos estados
+    # Variaveis do estado seguinte
+    x1 = z3.BitVec("x1", n)
+    y1 = z3.BitVec("y1", n)
+    z1 = z3.BitVec("z1", n)
+    pc1 = z3.Int("pc1")
+
+    # Estados do automato
     INIT = 0
     SKIP = 1
     LEFT = 2
@@ -53,25 +44,20 @@ def _():
     ERROR = 5
 
     # Estado inicial
-    inicial = z3.And(
-        pc == INIT,
-        z3.UGE(a, 0),
-        z3.UGE(b, 0)
+    inicial = pc == INIT
+
+    # Detecao de overflow sem sinal
+    overflow_left = z3.Not(
+        z3.BVMulNoOverflow(
+            x, z3.BitVecVal(2, n), False
+        )
     )
 
-    print("Variáveis e estado inicial definidos com sucesso!")
-    return ERROR, INIT, LEFT, RIGHT, SKIP, STOP, a, b, n, pc, x, y, z, z3
+    overflow_right = z3.Not(
+        z3.BVAddNoOverflow(z, x, False)
+    )
 
-
-@app.cell
-def _(INIT, LEFT, RIGHT, SKIP, STOP, a, b, n, pc, x, y, z, z3):
-    # Variaveis do estado seguinte
-    x1 = z3.BitVec("x1", n)
-    y1 = z3.BitVec("y1", n)
-    z1 = z3.BitVec("z1", n)
-    pc1 = z3.Int("pc1")
-
-    # Transicao INIT -> SKIP
+    # INIT -> SKIP
     t_init = z3.And(
         pc == INIT,
         pc1 == SKIP,
@@ -80,7 +66,7 @@ def _(INIT, LEFT, RIGHT, SKIP, STOP, a, b, n, pc, x, y, z, z3):
         z1 == 0
     )
 
-    # Transicao SKIP -> STOP
+    # SKIP -> STOP
     t_stop = z3.And(
         pc == SKIP,
         y == 0,
@@ -90,43 +76,26 @@ def _(INIT, LEFT, RIGHT, SKIP, STOP, a, b, n, pc, x, y, z, z3):
         z1 == z
     )
 
-    # Transicao SKIP -> LEFT
+    # SKIP -> LEFT
     t_left = z3.And(
         pc == SKIP,
         y != 0,
-        y & 1 == 0,
+        (y & 1) == 0,
         pc1 == LEFT,
         x1 == x,
         y1 == y,
         z1 == z
     )
 
-    # Transicao SKIP -> RIGHT
+    # SKIP -> RIGHT
     t_right = z3.And(
         pc == SKIP,
         y != 0,
-        y & 1 == 1,
+        (y & 1) == 1,
         pc1 == RIGHT,
         x1 == x,
         y1 == y,
         z1 == z
-    )
-
-    print("Primeiras transicoes definidas!")
-    return pc1, t_init, t_left, t_right, t_stop, x1, y1, z1
-
-
-@app.cell
-def _(ERROR, LEFT, RIGHT, SKIP, n, pc, pc1, x, x1, y, y1, z, z1, z3):
-    # Overflow na multiplicacao por 2
-    overflow_left = z3.ULT(
-        z3.BitVecVal(2**(n-1) - 1, n),
-        x
-    )
-
-    # Overflow na soma z + x
-    overflow_right = z3.Not(
-        z3.BVAddNoOverflow(z, x, True)
     )
 
     # LEFT -> SKIP
@@ -169,25 +138,7 @@ def _(ERROR, LEFT, RIGHT, SKIP, n, pc, pc1, x, x1, y, y1, z, z1, z3):
         z1 == z
     )
 
-    print("Operacoes e overflow definidos!")
-    return t_left_error, t_left_ok, t_right_error, t_right_ok
-
-
-@app.cell
-def _(
-    ERROR,
-    pc,
-    t_init,
-    t_left,
-    t_left_error,
-    t_left_ok,
-    t_right,
-    t_right_error,
-    t_right_ok,
-    t_stop,
-    z3,
-):
-    # Relacao de transicao completa
+    # Relacao de transicao
     transicao = z3.Or(
         t_init,
         t_stop,
@@ -202,104 +153,245 @@ def _(
     # Estado de erro
     erro = pc == ERROR
 
-    print("Relacao de transicao criada!")
-    print("Estado de erro definido!")
-    return (transicao,)
+    print("ALINEA A")
+
+    s = z3.Solver()
+    s.add(inicial)
+    print("Estado inicial:", s.check())
+
+    s = z3.Solver()
+    s.add(transicao)
+    print("Relacao de transicao:", s.check())
 
 
-@app.cell
-def _(n, pc, pc1, transicao, x, x1, y, y1, z, z1, z3):
-    # ALINEA B - Verificacao do invariante por k-inducao
+    # ==================================================
+    # FUNCOES AUXILIARES PARA AS PROVAS
+    # ==================================================
 
-    # Propriedade que queremos verificar
-    def propriedade(x, y, z, a, b):
-        return x * y + z == a * b
-
-
-    # Criar as variaveis para cada passo
-    def estado(i):
-        return (
-            z3.BitVec(f"x_{i}", n),
-            z3.BitVec(f"y_{i}", n),
-            z3.BitVec(f"z_{i}", n),
-            z3.Int(f"pc_{i}")
-        )
-
-
-    # Substituir as variaveis na relacao de transicao
-    def passo(e1, e2):
-        xa, ya, za, pca = e1
-        xb, yb, zb, pcb = e2
-
-        return z3.substitute(
-            transicao,
-            (x, xa),
-            (y, ya),
-            (z, za),
-            (pc, pca),
-            (x1, xb),
-            (y1, yb),
-            (z1, zb),
-            (pc1, pcb)
-        )
-
-
-    print("Funcoes para k-inducao criadas!")
-    return estado, passo, propriedade
-
-
-@app.cell
-def _(a, b, estado, passo, propriedade, z3):
-    # PASSO INDUTIVO
-
-    def passo_indutivo(k):
+    def verificar_base(propriedade, condicao=inicial):
         s = z3.Solver()
-
-        estados = [estado(i) for i in range(k + 1)]
-
-        # Relacoes de transicao
-        for i in range(k):
-            s.add(passo(estados[i], estados[i + 1]))
-
-        # Admitimos que a propriedade e verdadeira
-        # nos primeiros k estados
-        for i in range(k):
-            xi, yi, zi, pci = estados[i]
-
-            s.add(propriedade(xi, yi, zi, a, b))
-
-        # Procuramos uma violacao no estado seguinte
-        xf, yf, zf, pcf = estados[k]
-
-        s.add(z3.Not(propriedade(xf, yf, zf, a, b)))
-
+        s.add(condicao)
+        s.add(z3.Not(propriedade))
         return s.check()
 
 
-    for k in range(1, 6):
-        print(f"k = {k}: {passo_indutivo(k)}")
-    return
+    def verificar_passo(propriedade, seguinte):
+        s = z3.Solver()
+        s.add(propriedade)
+        s.add(transicao)
+        s.add(z3.Not(seguinte))
+        return s.check()
 
 
-@app.cell
-def _(ERROR, a, b, n, z3):
-    # ALINEA C - Seguranca do programa
+    # ==================================================
+    # ALINEA B - INVARIANTE POR K-INDUCAO
+    # ==================================================
 
-    # Limite dos valores iniciais
-    limite = 2 ** (n // 2)
+    print("\nALINEA B")
 
-    # Condicoes iniciais
-    condicao_inicial = z3.And(
-        z3.ULT(a, limite),
-        z3.ULT(b, limite)
+    # A igualdade so e exigida depois da inicializacao
+    propriedade_b = z3.Or(
+        pc == INIT,
+        x * y + z == a * b
     )
 
-    # Propriedade de seguranca
-    def seguranca(pc):
-        return pc != ERROR
+    propriedade_b1 = z3.Or(
+        pc1 == INIT,
+        x1 * y1 + z1 == a * b
+    )
 
-    print("Limite dos valores iniciais:", limite)
-    print("Propriedade de seguranca definida!")
+    base_b = verificar_base(propriedade_b)
+
+    passo_b = verificar_passo(
+        propriedade_b,
+        propriedade_b1
+    )
+
+    print("Caso base:", base_b)
+    print("Passo indutivo:", passo_b)
+
+    if base_b == z3.unsat and passo_b == z3.unsat:
+        print("Invariante demonstrado por 1-inducao.")
+    else:
+        print("A prova do invariante nao foi concluida.")
+
+
+    # ==================================================
+    # ALINEA C - SEGURANCA POR K-INDUCAO
+    # ==================================================
+
+    print("\nALINEA C")
+
+    limite = 2 ** (n // 2)
+
+    # Restricoes sobre as entradas
+    entradas_pequenas = z3.And(
+        z3.ULT(a, z3.BitVecVal(limite, n)),
+        z3.ULT(b, z3.BitVecVal(limite, n))
+    )
+
+    # Conversao dos BitVecs para inteiros nao negativos
+    def valor(v):
+        return z3.BV2Int(v, is_signed=False)
+
+
+    # Invariante reforcado
+    def invariante_seguro(px, xx, yy, zz):
+
+        estados_validos = z3.Or(
+            px == INIT,
+            px == SKIP,
+            px == LEFT,
+            px == RIGHT,
+            px == STOP
+        )
+
+        igualdade = z3.Or(
+            px == INIT,
+            valor(xx) * valor(yy) + valor(zz)
+            == valor(a) * valor(b)
+        )
+
+        # Condicoes associadas aos estados LEFT e RIGHT
+        condicao_left = z3.Implies(
+            px == LEFT,
+            z3.And(
+                yy != 0,
+                (yy & 1) == 0
+            )
+        )
+
+        condicao_right = z3.Implies(
+            px == RIGHT,
+            z3.And(
+                yy != 0,
+                (yy & 1) == 1
+            )
+        )
+
+        return z3.And(
+            entradas_pequenas,
+            estados_validos,
+            igualdade,
+            condicao_left,
+            condicao_right
+        )
+
+
+    seguro = invariante_seguro(pc, x, y, z)
+
+    seguro1 = invariante_seguro(pc1, x1, y1, z1)
+
+    # Caso base
+    base_c = verificar_base(
+        seguro,
+        z3.And(inicial, entradas_pequenas)
+    )
+
+    # Passo indutivo
+    passo_c = verificar_passo(seguro, seguro1)
+
+    print("Limite:", limite)
+    print("Caso base:", base_c)
+    print("Passo indutivo:", passo_c)
+
+    if base_c == z3.unsat and passo_c == z3.unsat:
+        print("Seguranca demonstrada por 1-inducao.")
+        print("O estado ERROR e inacessivel.")
+    else:
+        print("A prova de seguranca nao foi concluida.")
+
+
+    # ==================================================
+    # ALINEA D - TERMINACAO
+    # ==================================================
+
+    print("\nALINEA D")
+
+    # Funcao de ranking
+    def ranking(px, yy):
+
+        valor_y = valor(yy)
+
+        return z3.If(
+            px == INIT,
+            3 * (2 ** n) + 3,
+
+            z3.If(
+                px == SKIP,
+                3 * valor_y + 2,
+
+                z3.If(
+                    z3.Or(px == LEFT, px == RIGHT),
+                    3 * valor_y + 1,
+                    0
+                )
+            )
+        )
+
+
+    r = ranking(pc, y)
+    r1 = ranking(pc1, y1)
+
+    # Verificar que o ranking nunca e negativo
+    s = z3.Solver()
+    s.add(r < 0)
+    resultado_nao_negativo = s.check()
+
+    # Verificar que diminui em cada transicao
+    s = z3.Solver()
+    condicoes_fases = z3.And(
+        z3.Implies(
+            pc == LEFT,
+            z3.And(y != 0, (y & 1) == 0)
+        ),
+        z3.Implies(
+            pc == RIGHT,
+            z3.And(y != 0, (y & 1) == 1)
+        )
+    )
+
+    s.add(transicao)
+    s.add(condicoes_fases)
+    s.add(r1 >= r)
+    resultado_decrescente = s.check()
+
+    print("Ranking negativo:", resultado_nao_negativo)
+    print("Ranking nao decrescente:", resultado_decrescente)
+
+    if (
+        resultado_nao_negativo == z3.unsat
+        and resultado_decrescente == z3.unsat
+    ):
+        print("Terminacao demonstrada.")
+    else:
+        print("A prova de terminacao nao foi concluida.")
+
+
+
+
+    print("\n========== RESULTADO FINAL ==========")
+
+    prova_b = (
+        base_b == z3.unsat
+        and passo_b == z3.unsat
+    )
+
+    prova_c = (
+        base_c == z3.unsat
+        and passo_c == z3.unsat
+    )
+
+    prova_d = (
+        resultado_nao_negativo == z3.unsat
+        and resultado_decrescente == z3.unsat
+    )
+
+    print("Alinea A: SFOTS construido")
+    print("Alinea B:", "PROVADA" if prova_b else "NAO PROVADA")
+    print("Alinea C:", "PROVADA" if prova_c else "NAO PROVADA")
+    print("Alinea D:", "PROVADA" if prova_d else "NAO PROVADA")
+
     return
 
 
