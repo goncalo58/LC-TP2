@@ -6,7 +6,7 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
-    import marino as mo
+
     import z3
 
     # Tamanho dos vetores de bits
