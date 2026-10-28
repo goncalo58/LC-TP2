@@ -281,5 +281,27 @@ def _(a, b, estado, passo, propriedade, z3):
     return
 
 
+@app.cell
+def _(ERROR, a, b, n, z3):
+    # ALINEA C - Seguranca do programa
+
+    # Limite dos valores iniciais
+    limite = 2 ** (n // 2)
+
+    # Condicoes iniciais
+    condicao_inicial = z3.And(
+        z3.ULT(a, limite),
+        z3.ULT(b, limite)
+    )
+
+    # Propriedade de seguranca
+    def seguranca(pc):
+        return pc != ERROR
+
+    print("Limite dos valores iniciais:", limite)
+    print("Propriedade de seguranca definida!")
+    return
+
+
 if __name__ == "__main__":
     app.run()
