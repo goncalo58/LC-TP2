@@ -6,6 +6,78 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
+    import marimo as mo
+
+    return (mo,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Explicação Detalhada das Alíneas do Exercício (Z3 SMT Solver)
+
+    Este documento descreve a modelação e a verificação formal do algoritmo de **multiplicação por somas e deslocamentos bit a bit** implementado como um Sistema de Transição de Estados (FOTS) utilizando o Z3 SMT Solver.
+
+    ---
+
+    ##  Alínea A: Modelação do Sistema (FOTS e Relação de Transição)
+    * **Objetivo:** Definir a infraestrutura base do autómato e a sua relação de transição.
+    * **O que o código faz:**
+      * Declara as variáveis de estado de $n$ bits (`x`, `y`, `z`, `a`, `b`) e o ponteiro de instrução (`pc`), bem como as respetivas variáveis para o próximo estado (`x1`, `y1`, `z1`, `pc1`, etc.).
+      * Define os estados de controlo possíveis: `INIT`, `SKIP`, `LEFT`, `RIGHT`, `STOP` e `ERROR`.
+      * Modela as condições de *overflow* sem sinal (`overflow_left` e `overflow_right`) usando funções nativas do Z3 (`BVMulNoOverflow`, `BVAddNoOverflow`).
+      * Constrói todas as transições discretas (`t_init`, `t_stop`, `t_left`, `t_right`, `t_left_ok`, `t_right_ok`, `t_left_error`, `t_right_error`) e agrupa-as numa única **relação de transição** (`transicao`).
+    * **Verificação no Z3:** Testa a satisfatibilidade do estado inicial (`resultado_a1`) e da relação de transição (`resultado_a2`) para garantir que o modelo não é trivialmente insatisfatível.
+
+    ---
+
+    ##  Alínea B: Validação do Invariante por Indução
+    * **Objetivo:** Provar que a propriedade fundamental do algoritmo ($x \times y + z = a \times b$) é um invariante mantido ao longo de toda a execução.
+    * **O que o código faz:**
+      * Define a função `invariante_b`, que assegura que o estado de controlo é válido, que as fases de deslocamento (`LEFT`/`RIGHT`) respeitam a paridade de `y`, e que a igualdade algébrica é mantida (exceto no estado inicial `INIT` onde as variáveis ainda não foram inicializadas).
+    * **Verificação no Z3:** Utiliza a indução matemática simples (`base_b` e `passo_b`). O objetivo é que ambos os testes retornem `z3.unsat`, provando que nenhum estado inicial viola o invariante e que nenhuma transição válida consegue quebrar a propriedade.
+
+    ---
+
+    ##  Alínea C: Segurança e Controlo de Overflow
+    * **Objetivo:** Provar que o programa é seguro e que o estado de erro (`ERROR`) é inacessível, restringindo o tamanho das entradas.
+    * **O que o código faz:**
+      * Introduz restrições de entradas pequenas (`entradas_pequenas`) limitadas a $2^{n//2}$ para evitar cortes de bits devidos à aritmética modular de $n$ bits.
+      * Utiliza a função de extensão de bits `ZeroExt` (`ext`) para alargar os vetores de bits durante o cálculo da igualdade, garantindo precisão matemática exata sem perda de *carry*.
+      * Define `invariante_c`, excluindo explicitamente o estado `ERROR`.
+    * **Verificação no Z3:** Executa a $1$-indução (`base_c` e `passo_c`) para confirmar que o sistema permanece estritamente seguro e dentro dos limites definidos.
+
+    ---
+
+    ##  Alínea D: Terminação e Animação (Sem Deadlocks)
+    * **Objetivo:** Garantir que o programa termina sempre (não entra em loops infinitos) e que não existem bloqueios inesperados (*deadlocks*).
+    * **O que o código faz:**
+      * **Função de Ranking:** Cria uma métrica bem-fundada (`ranking`) combinando o ponteiro de instrução `pc` com o valor numérico de `y` (`z3.BV2Int`), que diminui estritamente a cada passo do algoritmo.
+      * **Verificação de Terminação:** Valida que o ranking nunca é negativo (`resultado_d1`) e que decresce estritamente nas transições válidas (`resultado_d2`).
+      * **Animação (Sem Deadlock):** Usa quantificadores existenciais (`z3.Exists`) para verificar se todos os estados não finais (`nao_final`) possuem pelo menos um sucessor válido (`resultado_d3`), e se os estados finais (`STOP`, `ERROR`) agem corretamente como sumidouros estáveis (`resultado_d4`).
+
+    ---
+
+    ##  Alínea E: Correção Funcional no Estado Final (`STOP`)
+    * **Objetivo:** Provar que, quando o programa atinge o estado de sucesso (`STOP`), o resultado final guardado em `z` é exatamente o produto correto ($a \times b$).
+    * **O que o código faz:**
+      * Define um invariante auxiliar (`invariante_j`) para provar que o estado `STOP` só é alcançado quando `y == 0`.
+    * **Verificação no Z3:** Utiliza os invariantes anteriores (`prop_b` e `prop_c`) para verificar que, no estado `STOP`, a condição `z != a * b` é insatisfatível, tanto em aritmética modular de $2^n$ (`resultado_e1`) como em inteiros alargados para entradas pequenas (`resultado_e2`).
+
+    ---
+
+    ##  Alínea F: $k$-Indução com $k$ Variável
+    * **Objetivo:** Testar a robustez da verificação utilizando $k$-indução genérica e encontrar o menor $k$ necessário para provar propriedades simples (como `pc != ERROR`).
+    * **O que o código faz:**
+      * Implementa a função de $k$-indução genérica (`k_inducao`) que desdobra traços de comprimento $k$ utilizando substituições de variáveis indexadas (`z3.substitute`).
+      * Adiciona uma relação de sumidouro para estabilizar os estados finais (`STOP` e `ERROR`) durante a análise de traços longos.
+      * Executa um ciclo iterativo de $k = 1$ até $60$ para testar a propriedade de segurança simples e determinar o menor limiar $k$ (`k_min`) em que a indução fecha com sucesso (`unsat`).
+    """)
+    return
+
+
+@app.cell
+def _():
     import z3
 
     # ==========================================================
@@ -270,6 +342,8 @@ def _():
     # ALINEA C - SEGURANCA POR K-INDUCAO
     # ==========================================================
 
+    #Nesta alinea foi usado o auxilio de uma LLM
+
     print("\n========== ALINEA C ==========")
 
     limite = 2 ** (n // 2)
@@ -344,6 +418,8 @@ def _():
     # ALINEA D - TERMINACAO
     # ==========================================================
 
+    #Nesta alinea foi usado o auxilio de uma LLM
+
     print("\n========== ALINEA D ==========")
 
     # Funcao de ranking.
@@ -405,35 +481,35 @@ def _():
     else:
         print("Terminacao nao provada.")
 
-        # ----------------------------------------------------------
-        # ALINEA D (cont.) - ANIMACAO: SEM DEADLOCK FORA DOS FINAIS
-        # ----------------------------------------------------------
+    # ----------------------------------------------------------
+    # ALINEA D (cont.) - ANIMACAO: SEM DEADLOCK FORA DOS FINAIS
+    # ----------------------------------------------------------
 
-        print("\n========== ALINEA D (ANIMACAO) ==========")
+    print("\n========== ALINEA D (ANIMACAO) ==========")
 
-        nao_final = z3.Or(pc == INIT, pc == SKIP, pc == LEFT, pc == RIGHT)
+    nao_final = z3.Or(pc == INIT, pc == SKIP, pc == LEFT, pc == RIGHT)
 
-        tem_sucessor = z3.Exists([pc1, x1, y1, z1, a1, b1], transicao)
+    tem_sucessor = z3.Exists([pc1, x1, y1, z1, a1, b1], transicao)
 
-        # (i) nenhum estado nao final fica bloqueado
-        resultado_d3 = resolver(nao_final, z3.Not(tem_sucessor))
+    # (i) nenhum estado nao final fica bloqueado
+    resultado_d3 = resolver(nao_final, z3.Not(tem_sucessor))
 
-        # (ii) STOP e ERROR sao realmente finais
-        resultado_d4 = resolver(z3.Or(pc == STOP, pc == ERROR), transicao)
+    # (ii) STOP e ERROR sao realmente finais
+    resultado_d4 = resolver(z3.Or(pc == STOP, pc == ERROR), transicao)
 
-        print("Deadlock fora dos finais:", resultado_d3)
-        print("Finais com sucessor:", resultado_d4)
+    print("Deadlock fora dos finais:", resultado_d3)
+    print("Finais com sucessor:", resultado_d4)
 
-        prova_animacao = (
-            prova_d
-            and resultado_d3 == z3.unsat
-            and resultado_d4 == z3.unsat
-        )
+    prova_animacao = (
+        prova_d
+        and resultado_d3 == z3.unsat
+        and resultado_d4 == z3.unsat
+    )
 
-        if prova_animacao:
-            print("Animacao provada: o programa termina para quaisquer a, b.")
-        else:
-            print("Animacao nao provada.")
+    if prova_animacao:
+        print("Animacao provada: o programa termina para quaisquer a, b.")
+    else:
+        print("Animacao nao provada.")
 
 
 
@@ -516,6 +592,8 @@ def _():
     # ==========================================================
     # ALINEA F - K-INDUCAO COM k VARIAVEL
     # ==========================================================
+
+    #Nesta alinea foi usado o auxilio de uma LLM
 
     print("\n========== ALINEA F (K-INDUCAO) ==========")
 
@@ -646,6 +724,28 @@ def _():
         print("\nTodas as verificacoes passaram.")
     else:
         print("\nExistem verificacoes por concluir.")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ##  Documentação e Entrega
+
+    ### Porque escolhemos o Z3 SMT Solver?
+    Decidimos usar o **Z3 Solver** para modelar e verificar este trabalho prático de *Multiplicação por Somas e Deslocamentos Bit a Bit como FOTS / FSM Simbólica*. A lógica de primeira ordem e teorias de *BitVectors* foram a melhor opção porque nos permitiram definir formalmente regras de transição complexas, estados e condições de overflow de forma declarativa e matematicamente rigorosa.
+
+    ### Porque é que a Indução, o Ranking e a Extensão de Bits são importantes?
+    Ao utilizarmos a indução simples e $k$-indução para validar invariantes e ao empregar funções de ranking bem-fundadas (ligando o ponteiro de instrução `pc` ao valor numérico de `y`), conseguimos provar propriedades complexas de segurança e terminação. Além disso, o uso de extensões de bits (`ZeroExt`) permitiu evitar a perda de bits por *overflow* aritmético modular, garantindo a correção exata do produto.
+
+    ### Uso de Ferramentas LLM (Registo de Diálogo)
+    O link para o diálogo integral com o LLM está disponível aqui: **https://share.gemini.google/7m6SgyzkoDHi**
+
+    Durante o desenvolvimento, o uso do LLM focou-se em três pilares avaliados:
+    1. **Adequação e Modelação Simbólica:** Estruturação da relação de transição do autómato (`transicao`), estados de controlo (`INIT`, `SKIP`, `LEFT`, `RIGHT`, `STOP`, `ERROR`) e gestão de *overflows* sem sinal (`BVMulNoOverflow`, `BVAddNoOverflow`).
+    2. **Resolução de Problemas Específicos do Framework:** Resolução de conflitos de âmbito de variáveis e instanciação dinâmica de estados no Marimo e no Z3 (especialmente na construção de $k$-indução com $k$ variável e substituição de vetores).
+    3. **Suporte à Depuração:** O modelo foi usado como apoio à análise de erros lógicos (como a validação de invariantes nas alíneas C, D e F), sendo a solução final integrada e validada de forma autónoma.
+    """)
     return
 
 
