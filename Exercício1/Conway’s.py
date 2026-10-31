@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.24.2"
+__generated_with = "0.25.1"
 app = marimo.App(width="medium")
 
 
@@ -168,6 +168,15 @@ def _(
         )
 
     def trans_async(s_curr, s_next, n):
+        # #[LLM-GENERATED START]
+        # ------------------------------------------------------------------
+        # Nota de Desenvolvimento (Auxílio de LLM):
+        # Esta secção de modelação simbólica e transição assíncrona foi concebida
+        # e refinada com o suporte de uma ferramenta LLM. O diálogo iterativo
+        # focou-se na otimização da codificação O(N^2) com restrições pseudo-booleans (PbEq)
+        # e na garantia de totalidade da relação de transição através de stuttering condicional,
+        # assegurando que o solver Z3 não gera colisões de variáveis entre passos temporais.
+        # ------------------------------------------------------------------
         """
         Exatamente UMA célula normal muda de estado (para o valor dado pela regra B3/S23).
         Codificação compacta O(N^2) com variáveis de seleção sel_c.
@@ -188,6 +197,7 @@ def _(
         restr.append(Implies(ha_movel, PbEq([(sel[c], 1) for c in cel], 1)))
         restr.append(Implies(Not(ha_movel), And([Not(sel[c]) for c in cel])))
         return And(restr)
+    #[LLM END]
 
     def trans(s_curr, s_next, modo=MODO, n=N):
         return trans_sync(s_curr, s_next, n) if modo == "sync" else trans_async(s_curr, s_next, n)
@@ -248,7 +258,14 @@ def _(ListedColormap, Patch, np, plt):
             for dj in (-1, 0, 1)
             if (di, dj) != (0, 0)
         )
-
+    # #[LLM-GENERATED START]
+    # ------------------------------------------------------------------
+    # Nota de Desenvolvimento (Auxílio de LLM / Refatoração):
+    # Isolamento da lógica da regra B3/S23 numa função auxiliar vetorizada 
+    # (`valor_regra`), aplicando o princípio DRY (Don't Repeat Yourself). 
+    # Esta modularização permitiu reutilizar o cálculo tanto no passo síncrono 
+    # como no assíncrono de forma limpa, evitando duplicação de código em NumPy.
+    # ------------------------------------------------------------------
     def valor_regra(G):
         viz = vizinhos_vivos(G)
         c = G[1:-1, 1:-1]
@@ -258,6 +275,15 @@ def _(ListedColormap, Patch, np, plt):
         H = G.copy()
         H[1:-1, 1:-1] = valor_regra(G)
         return H
+
+    # #[LLM-GENERATED START]
+    # ------------------------------------------------------------------
+    # Nota de Desenvolvimento (Auxílio de LLM):
+    # Implementação vetorizada do passo síncrono utilizando slices espaciais 
+    # de matrizes NumPy para cálculo eficiente da vizinhança de Chebyshev,
+    # combinada com deteção de atratores em O(1) baseada em hashing de bytes 
+    # restrita às células normais.
+    # ------------------------------------------------------------------
 
     def passo_async(G, rng):
         """Escolhe (uniformemente) uma célula que possa mudar e aplica-lhe a regra."""
@@ -283,6 +309,7 @@ def _(ListedColormap, Patch, np, plt):
             vistos[chave] = t
             hist.append(G)
         return None
+    ##[LLM END]
 
     def codigos(G):
         n = G.shape[0] - 2
@@ -369,6 +396,14 @@ def _(
     random,
     set_sim,
 ):
+    # #[LLM-GENERATED START]
+    # ------------------------------------------------------------------
+    # Nota de Desenvolvimento (Auxílio de LLM):
+    # Gestão de estado reativo em Marimo (`mo.state`) e lógica de avanço 
+    # temporal por lotes (k passos), integrando o simulador NumPy com os 
+    # botões de controlo da interface e preservando o estado do gerador 
+    # pseudo-aleatório (`rng`) para reprodutibilidade por seed.
+    # ------------------------------------------------------------------
     def _avancar(s, k):
         G, ult = s["G"], None
         for _ in range(k):
@@ -443,46 +478,81 @@ def _(
     trans,
     unsat,
 ):
+    # #[LLM-GENERATED START] - Motores de Verificação Formal (BMC e K-Indução) otimizados com auxílio de LLM
     def bmc(predicado, k_max, modo=MODO, n=N):
         """Existe execução de comprimento <= k_max que atinge `predicado`? (SAT = sim)."""
+        # Inicializa a instância do solver Z3
         solver = Solver()
+    
+        # Cria a lista de estados temporais e instancia o estado inicial (t = 0)
         estados = [declare(0, n)]
         solver.add(init(estados[0], n))
+    
+        # Iteração até à profundidade máxima k_max
         for k in range(k_max + 1):
+            # A partir de t > 0, adiciona novos estados e a relação de transição temporal
             if k > 0:
                 estados.append(declare(k, n))
                 solver.add(trans(estados[k - 1], estados[k], modo, n))
+        
+            # Utiliza push() para criar um contexto incremental no solver
             solver.push()
+            # Adiciona o predicado alvo (ex: estado de erro) no passo k atual
             solver.add(predicado(estados[k], n))
+        
+            # Verifica se o predicado é alcançável (SAT)
             if solver.check() == sat:
                 m = solver.model()
+                # Extrai a trajetória completa (contra-exemplo) obtida pelo modelo do Z3
                 traj = [extrair_G(m, estados[t], n) for t in range(k + 1)]
                 solver.pop()
                 return {"sat": True, "k": k, "traj": traj}
+            
+            # Restaura o estado anterior da pilha do solver com pop()
             solver.pop()
+        
+        # Retorna falso se não encontrar nenhum contra-exemplo até k_max
         return {"sat": False, "k": k_max, "traj": None}
 
     def k_inducao_nunca_erro(k_max, modo=MODO, n=N):
         """K-indução para P = G(not erro)."""
+        # Itera sobre os valores de k para a k-indução
         for k in range(1, k_max + 1):
+        
+            # --- CASO BASE ---
             base = Solver()
             b = [declare(t, n) for t in range(k)]
             base.add(init(b[0], n))
+        
+            # Adiciona as transições sequenciais até k-1
             for t in range(k - 1):
                 base.add(trans(b[t], b[t + 1], modo, n))
+            
+            # Verifica se o erro ocorre em qualquer um dos estados do caso base
             base.add(Or([error_state(x, n) for x in b]))
             if base.check() == sat:
                 return {"resultado": "FALSA (caso base falha)", "k": k}
 
+            # --- PASSO INDUTIVO ---
             ind = Solver()
             s = [declare(f"ind_{t}", n) for t in range(k + 1)]
+        
+            # Constrói a cadeia de transições para k+1 estados
             for t in range(k):
+                # Assume a hipótese inductiva (nenhum estado intermédio tem erro)
                 ind.add(Not(error_state(s[t], n)))
                 ind.add(trans(s[t], s[t + 1], modo, n))
+            
+            # Testa a tese (o erro ocorre no último passo k)
             ind.add(error_state(s[k], n))
+        
+            # Se for UNSAT, significa que a indução é válida e a propriedade está provada
             if ind.check() == unsat:
                 return {"resultado": "PROVADA por k-indução", "k": k}
+            
+        # Retorna inconclusivo se atingir o limite sem desfecho
         return {"resultado": f"INCONCLUSIVA (k <= {k_max})", "k": k_max}
+    ##[LLM END]
 
     def prova_1_orbita_z3(transiente, periodo, n=N):
         """Prova em Z3 que o erro nunca é alcançado (síncrono)."""
@@ -739,6 +809,28 @@ def _(
                 )
             )
     mo.vstack(_out)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 7. Documentação e Entrega
+
+    ### Porque escolhemos o Z3 SMT Solver?
+    Decidimos usar o **Z3 Solver** para modelar e verificar este trabalho prático de *Game of Life Finitizado como FOTS / FSM Simbólica*. A lógica proposicional e o SMT foram a melhor opção porque nos permitiram definir formalmente regras de transição complexas de forma declarativa e matematicamente rigorosa.
+
+    ### Porque é que o BMC Incremental e a Certificação de Atratores são importantes?
+    Ao utilizarmos uma pilha incremental (`push()` e `pop()`) no Bounded Model Checking (BMC) e ao certificarmos os atratores através de laços matemáticos, conseguimos verificar as propriedades de segurança de forma eficiente, evitando a explosão combinatória.
+
+    ### Uso de Ferramentas LLM (Registo de Diálogo)
+    O link para o diálogo integral com o LLM está disponível aqui: **https://share.gemini.google/B7MOD5lcCrSz**
+
+    Durante o desenvolvimento, o uso do LLM focou-se em três pilares avaliados:
+    1. **Adequação e Modelação Simbólica:** Estruturação da codificação $O(N^2)$ do modo assíncrono (`trans_async`) com restrições de cardinalidade (`PbEq`).
+    2. **Resolução de Problemas Específicos do Framework:** Resolução de conflitos de âmbito de variáveis no Marimo e no Z3.
+    3. **Suporte à Depuração:** O modelo foi usado como apoio à análise de erros lógicos, sendo a solução final integrada e validada de forma autónoma.
+    """)
     return
 
 
