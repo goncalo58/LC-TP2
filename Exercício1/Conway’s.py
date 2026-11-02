@@ -483,23 +483,23 @@ def _(
         """Existe execução de comprimento <= k_max que atinge `predicado`? (SAT = sim)."""
         # Inicializa a instância do solver Z3
         solver = Solver()
-    
+
         # Cria a lista de estados temporais e instancia o estado inicial (t = 0)
         estados = [declare(0, n)]
         solver.add(init(estados[0], n))
-    
+
         # Iteração até à profundidade máxima k_max
         for k in range(k_max + 1):
             # A partir de t > 0, adiciona novos estados e a relação de transição temporal
             if k > 0:
                 estados.append(declare(k, n))
                 solver.add(trans(estados[k - 1], estados[k], modo, n))
-        
+    
             # Utiliza push() para criar um contexto incremental no solver
             solver.push()
             # Adiciona o predicado alvo (ex: estado de erro) no passo k atual
             solver.add(predicado(estados[k], n))
-        
+    
             # Verifica se o predicado é alcançável (SAT)
             if solver.check() == sat:
                 m = solver.model()
@@ -507,10 +507,10 @@ def _(
                 traj = [extrair_G(m, estados[t], n) for t in range(k + 1)]
                 solver.pop()
                 return {"sat": True, "k": k, "traj": traj}
-            
+        
             # Restaura o estado anterior da pilha do solver com pop()
             solver.pop()
-        
+    
         # Retorna falso se não encontrar nenhum contra-exemplo até k_max
         return {"sat": False, "k": k_max, "traj": None}
 
@@ -518,16 +518,16 @@ def _(
         """K-indução para P = G(not erro)."""
         # Itera sobre os valores de k para a k-indução
         for k in range(1, k_max + 1):
-        
+    
             # --- CASO BASE ---
             base = Solver()
             b = [declare(t, n) for t in range(k)]
             base.add(init(b[0], n))
-        
+    
             # Adiciona as transições sequenciais até k-1
             for t in range(k - 1):
                 base.add(trans(b[t], b[t + 1], modo, n))
-            
+        
             # Verifica se o erro ocorre em qualquer um dos estados do caso base
             base.add(Or([error_state(x, n) for x in b]))
             if base.check() == sat:
@@ -536,20 +536,20 @@ def _(
             # --- PASSO INDUTIVO ---
             ind = Solver()
             s = [declare(f"ind_{t}", n) for t in range(k + 1)]
-        
+    
             # Constrói a cadeia de transições para k+1 estados
             for t in range(k):
                 # Assume a hipótese inductiva (nenhum estado intermédio tem erro)
                 ind.add(Not(error_state(s[t], n)))
                 ind.add(trans(s[t], s[t + 1], modo, n))
-            
+        
             # Testa a tese (o erro ocorre no último passo k)
             ind.add(error_state(s[k], n))
-        
+    
             # Se for UNSAT, significa que a indução é válida e a propriedade está provada
             if ind.check() == unsat:
                 return {"resultado": "PROVADA por k-indução", "k": k}
-            
+        
         # Retorna inconclusivo se atingir o limite sem desfecho
         return {"resultado": f"INCONCLUSIVA (k <= {k_max})", "k": k_max}
     ##[LLM END]
