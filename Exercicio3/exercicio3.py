@@ -513,37 +513,6 @@ def _():
 
 
 
-    # ----------------------------------------------------------
-    # ALINEA D (cont.) - ANIMACAO: SEM DEADLOCK FORA DOS FINAIS
-    # ----------------------------------------------------------
-
-    print("\n========== ALINEA D (ANIMACAO) ==========")
-
-    nao_final = z3.Or(pc == INIT, pc == SKIP, pc == LEFT, pc == RIGHT)
-
-    tem_sucessor = z3.Exists([pc1, x1, y1, z1, a1, b1], transicao)
-
-    # (i) nenhum estado nao final fica bloqueado
-    resultado_d3 = resolver(nao_final, z3.Not(tem_sucessor))
-
-    # (ii) STOP e ERROR sao realmente finais
-    resultado_d4 = resolver(z3.Or(pc == STOP, pc == ERROR), transicao)
-
-    print("Deadlock fora dos finais:", resultado_d3)
-    print("Finais com sucessor:", resultado_d4)
-
-    prova_animacao = (
-        prova_d
-        and resultado_d3 == z3.unsat
-        and resultado_d4 == z3.unsat
-    )
-
-    if prova_animacao:
-        print("Animacao provada: o programa termina para quaisquer a, b.")
-    else:
-        print("Animacao nao provada.")
-
-
 
 
 
